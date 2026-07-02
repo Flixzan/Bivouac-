@@ -15,24 +15,12 @@
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
 <style>
-  body { margin: 0; }
-  .font-display { font-family: 'Bitter', serif; }
-  .font-body { font-family: 'Inter', sans-serif; }
-  .font-mono { font-family: 'JetBrains Mono', monospace; }
+body { margin: 0; }
+.font-display { font-family: 'Bitter', serif; }
+.font-body { font-family: 'Inter', sans-serif; }
+.font-mono { font-family: 'JetBrains Mono', monospace; }
 </style>
 
-<script>
-  window.onerror = function (msg, url, line, col) {
-    document.body.innerHTML =
-      "<div style='padding:20px;font-family:monospace;color:#A63D2F'>" +
-      "<h3>Erreur JS</h3>" +
-      "<p>" + msg + "</p>" +
-      "<p>Ligne: " + line + " Col: " + col + "</p>" +
-      "<p style='color:#333;margin-top:10px'>Erreur bloquante détectée (Supabase ou JS)</p>" +
-      "</div>";
-    return false;
-  };
-</script>
 </head>
 
 <body>
@@ -40,26 +28,7 @@
 
 <script type="text/babel">
 
-const { useState, useMemo, useEffect } = React;
-
-/* ================= ICONS ================= */
-const Icon = ({ children, className, spin }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"
-    strokeLinecap="round" strokeLinejoin="round"
-    className={(className || "") + (spin ? " animate-spin" : "")}>
-    {children}
-  </svg>
-);
-
-/* (garde tes icônes inchangées) */
-const MapPinIcon = (p) => <Icon {...p}><path d="M12 22s8-7.5 8-13a8 8 0 1 0-16 0c0 5.5 8 13 8 13Z"/><circle cx="12" cy="9" r="2.4"/></Icon>;
-const Droplet = (p) => <Icon {...p}><path d="M12 2.5s6.5 7.2 6.5 11.5A6.5 6.5 0 1 1 5.5 14C5.5 9.7 12 2.5 12 2.5Z"/></Icon>;
-const Zap = (p) => <Icon {...p}><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></Icon>;
-const ShieldCheck = (p) => <Icon {...p}><path d="M12 2 4 5v6c0 5 3.5 9.5 8 11 4.5-1.5 8-6 8-11V5l-8-3Z"/></Icon>;
-const Signal = (p) => <Icon {...p}><path d="M4 20h.01M9 20V14M14 20v-9M19 20V6"/></Icon>;
-const ClockIcon = (p) => <Icon {...p}><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></Icon>;
-const Loader2 = (p) => <Icon spin {...p}><path d="M21 12a9 9 0 1 1-9-9"/></Icon>;
-const Compass = (p) => <Icon {...p}><circle cx="12" cy="12" r="9"/><path d="M15 9l-2 6-6 2 2-6 6-2Z"/></Icon>;
+const { useState, useEffect, useMemo } = React;
 
 /* ================= SUPABASE ================= */
 const SUPABASE_URL = "https://omdooibzkysfotifofgo.supabase.co";
@@ -72,96 +41,159 @@ const headers = {
 };
 
 async function fetchAires() {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/aires?select=*`, { headers });
-  if (!res.ok) throw new Error("Aires load failed");
-  return res.json();
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/aires?select=*`, { headers });
+    if (!res.ok) return [];
+    return await res.json();
+  } catch {
+    return [];
+  }
 }
 
-async function fetchSignalements() {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/signalements?select=*`, { headers });
-  if (!res.ok) throw new Error("Feed load failed");
-  return res.json();
+/* ================= SAFE PROJECTOR ================= */
+function makeProjector(aires) {
+
+  const valid = (aires || []).filter(a =>
+    typeof a.latitude === "number" &&
+    typeof a.longitude === "number"
+  );
+
+  if (valid.length === 0) {
+    return () => ({ x: 50, y: 50 });
+  }
+
+  const lats = valid.map(a => a.latitude);
+  const lngs = valid.map(a => a.longitude);
+
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+
+  const padLat = (maxLat - minLat || 1) * 0.2;
+  const padLng = (maxLng - minLng || 1) * 0.2;
+
+  return (a) => ({
+    x: ((a.longitude - (minLng - padLng)) /
+      ((maxLng + padLng) - (minLng - padLng))) * 100,
+
+    y: 100 - ((a.latitude - (minLat - padLat)) /
+      ((maxLat + padLat) - (minLat - padLat))) * 100
+  });
 }
 
 /* ================= APP ================= */
 function App() {
 
   const [aires, setAires] = useState([]);
-  const [selected, setSelected] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
   useEffect(() => {
-    async function load() {
-      try {
-        const [a, f] = await Promise.all([
-          fetchAires().catch(() => []),
-          fetchSignalements().catch(() => [])
-        ]);
-
-        setAires(a || []);
-        setSelected(a?.length ? a[0] : null);
-        setError(null);
-
-      } catch (e) {
-        setError(e.message);
-        setAires([]);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    load();
+    (async () => {
+      const data = await fetchAires();
+      setAires(data || []);
+      setSelectedId(data?.[0]?.id || null);
+      setLoading(false);
+    })();
   }, []);
 
-  if (loading) {
-    return (
-      <div style={{ padding: 20, fontFamily: "monospace" }}>
-        <Loader2 /> Chargement...
-      </div>
-    );
-  }
+  const projector = useMemo(
+    () => makeProjector(aires || []),
+    [aires]
+  );
 
-  if (error) {
-    return (
-      <div style={{ padding: 20, color: "red" }}>
-        Erreur: {error}
-      </div>
-    );
+  const selected = aires?.find(a => a.id === selectedId) || aires?.[0] || null;
+
+  if (loading) {
+    return <div style={{padding:20}}>Chargement...</div>;
   }
 
   if (!selected) {
-    return <div style={{ padding: 20 }}>Aucune aire</div>;
+    return <div style={{padding:20}}>Aucune aire</div>;
   }
 
   return (
-    <div style={{ padding: 20, fontFamily: "Inter" }}>
+    <div style={{padding:20,fontFamily:"Inter"}}>
+
       <h1>Bivouac</h1>
 
-      <h3>{selected.nom}</h3>
+      {/* ================= CARTE ================= */}
+      <div style={{
+        position:"relative",
+        height:200,
+        background:"#eee",
+        borderRadius:12,
+        marginBottom:20
+      }}>
 
-      <p>{selected.zone}</p>
+        {/* LIGNES */}
+        <svg style={{position:"absolute",width:"100%",height:"100%"}}>
+          {aires.length > 1 && aires.slice(1).map((a,i) => {
+            const p0 = projector(aires[0]);
+            const p1 = projector(a);
+            return (
+              <line key={i}
+                x1={`${p0.x}%`} y1={`${p0.y}%`}
+                x2={`${p1.x}%`} y2={`${p1.y}%`}
+                stroke="red" opacity="0.4"
+              />
+            );
+          })}
+        </svg>
 
-      <hr />
+        {/* PINS */}
+        {aires.map(a => {
+          if (!a.latitude || !a.longitude) return null;
+          const p = projector(a);
 
-      {aires.map(a => (
-        <div key={a.id} onClick={() => setSelected(a)}
-          style={{
-            padding: 10,
-            marginTop: 5,
-            border: "1px solid #ccc",
-            cursor: "pointer"
-          }}>
-          {a.nom}
-        </div>
-      ))}
+          return (
+            <div key={a.id}
+              onClick={() => setSelectedId(a.id)}
+              style={{
+                position:"absolute",
+                left:`${p.x}%`,
+                top:`${p.y}%`,
+                transform:"translate(-50%,-100%)",
+                cursor:"pointer",
+                fontSize:18
+              }}>
+              📍
+            </div>
+          );
+        })}
+
+      </div>
+
+      {/* ================= DETAIL ================= */}
+      <div style={{padding:10,border:"1px solid #ccc"}}>
+        <h2>{selected.nom}</h2>
+        <p>{selected.zone}</p>
+      </div>
+
+      {/* ================= LISTE ================= */}
+      <div style={{marginTop:20}}>
+        {aires.map(a => (
+          <div key={a.id}
+            onClick={() => setSelectedId(a.id)}
+            style={{
+              padding:10,
+              border:"1px solid #ddd",
+              marginTop:5,
+              cursor:"pointer"
+            }}>
+            {a.nom}
+          </div>
+        ))}
+      </div>
+
     </div>
   );
 }
 
-/* ================= RENDER ================= */
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 
 </script>
+
 </body>
 </html>
