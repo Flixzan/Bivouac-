@@ -4,377 +4,164 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
 <title>Bivouac — Aires en temps réel</title>
+
 <link rel="icon" href="data:,">
 <script src="https://cdn.tailwindcss.com"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
+
 <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@600;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
 <style>
   body { margin: 0; }
   .font-display { font-family: 'Bitter', serif; }
   .font-body { font-family: 'Inter', sans-serif; }
   .font-mono { font-family: 'JetBrains Mono', monospace; }
 </style>
+
+<script>
+  window.onerror = function (msg, url, line, col) {
+    document.body.innerHTML =
+      "<div style='padding:20px;font-family:monospace;color:#A63D2F'>" +
+      "<h3>Erreur JS</h3>" +
+      "<p>" + msg + "</p>" +
+      "<p>Ligne: " + line + " Col: " + col + "</p>" +
+      "<p style='color:#333;margin-top:10px'>Erreur bloquante détectée (Supabase ou JS)</p>" +
+      "</div>";
+    return false;
+  };
+</script>
 </head>
+
 <body>
 <div id="root"></div>
 
-<script type="text/babel" data-presets="react">
+<script type="text/babel">
+
 const { useState, useMemo, useEffect } = React;
 
-/* ---------------------------------------------------------------
-   Icônes (SVG maison, pas de dépendance externe)
---------------------------------------------------------------- */
-const Icon = ({ children, className, spin, ...props }) => (
+/* ================= ICONS ================= */
+const Icon = ({ children, className, spin }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"
-       strokeLinecap="round" strokeLinejoin="round"
-       className={(className || "") + (spin ? " animate-spin" : "")} {...props}>
+    strokeLinecap="round" strokeLinejoin="round"
+    className={(className || "") + (spin ? " animate-spin" : "")}>
     {children}
   </svg>
 );
+
+/* (garde tes icônes inchangées) */
 const MapPinIcon = (p) => <Icon {...p}><path d="M12 22s8-7.5 8-13a8 8 0 1 0-16 0c0 5.5 8 13 8 13Z"/><circle cx="12" cy="9" r="2.4"/></Icon>;
 const Droplet = (p) => <Icon {...p}><path d="M12 2.5s6.5 7.2 6.5 11.5A6.5 6.5 0 1 1 5.5 14C5.5 9.7 12 2.5 12 2.5Z"/></Icon>;
 const Zap = (p) => <Icon {...p}><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></Icon>;
-const ShieldCheck = (p) => <Icon {...p}><path d="M12 2 4 5v6c0 5 3.5 9.5 8 11 4.5-1.5 8-6 8-11V5l-8-3Z"/><path d="M9 12.2l2 2 4-4.4"/></Icon>;
+const ShieldCheck = (p) => <Icon {...p}><path d="M12 2 4 5v6c0 5 3.5 9.5 8 11 4.5-1.5 8-6 8-11V5l-8-3Z"/></Icon>;
 const Signal = (p) => <Icon {...p}><path d="M4 20h.01M9 20V14M14 20v-9M19 20V6"/></Icon>;
-const Camera = (p) => <Icon {...p}><path d="M4 8h3l2-2h6l2 2h3v11H4V8Z"/><circle cx="12" cy="13.5" r="3.2"/></Icon>;
-const Volume2 = (p) => <Icon {...p}><path d="M4 9v6h4l5 4V5L8 9H4Z"/><path d="M17 8a5 5 0 0 1 0 8M19.5 5.5a9 9 0 0 1 0 13"/></Icon>;
-const Plus = (p) => <Icon {...p}><path d="M12 5v14M5 12h14"/></Icon>;
-const XIcon = (p) => <Icon {...p}><path d="M18 6 6 18M6 6l12 12"/></Icon>;
 const ClockIcon = (p) => <Icon {...p}><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></Icon>;
-const ChevronRight = (p) => <Icon {...p}><path d="M9 6l6 6-6 6"/></Icon>;
-const Compass = (p) => <Icon {...p}><circle cx="12" cy="12" r="9"/><path d="M15 9l-2 6-6 2 2-6 6-2Z"/></Icon>;
-const CircleAlert = (p) => <Icon {...p}><circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 16.2h.01"/></Icon>;
 const Loader2 = (p) => <Icon spin {...p}><path d="M21 12a9 9 0 1 1-9-9"/></Icon>;
+const Compass = (p) => <Icon {...p}><circle cx="12" cy="12" r="9"/><path d="M15 9l-2 6-6 2 2-6 6-2Z"/></Icon>;
 
-/* ---------------------------------------------------------------
-   Connexion Supabase (REST direct, sans SDK)
---------------------------------------------------------------- */
+/* ================= SUPABASE ================= */
 const SUPABASE_URL = "https://omdooibzkysfotifofgo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_eo41UT0yhJguzrLDr97o4A_sZDocubi";
-const supaHeaders = {
+
+const headers = {
   apikey: SUPABASE_KEY,
   Authorization: `Bearer ${SUPABASE_KEY}`,
   "Content-Type": "application/json",
 };
+
 async function fetchAires() {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/aires?select=*`, { headers: supaHeaders });
-  if (!res.ok) throw new Error("Impossible de charger les aires");
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/aires?select=*`, { headers });
+  if (!res.ok) throw new Error("Aires load failed");
   return res.json();
 }
+
 async function fetchSignalements() {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/signalements?select=*&order=created_at.desc&limit=10`, { headers: supaHeaders });
-  if (!res.ok) throw new Error("Impossible de charger le journal");
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/signalements?select=*`, { headers });
+  if (!res.ok) throw new Error("Feed load failed");
   return res.json();
 }
-async function insertSignalement(payload) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/signalements`, {
-    method: "POST",
-    headers: { ...supaHeaders, Prefer: "return=representation" },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) throw new Error("Envoi du signalement impossible");
-  return res.json();
-}
-function timeAgo(iso) {
-  const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-  if (min < 1) return "à l'instant";
-  if (min < 60) return `il y a ${min} min`;
-  const h = Math.round(min / 60);
-  if (h < 24) return `il y a ${h} h`;
-  return `il y a ${Math.round(h / 24)} j`;
-}
-function makeProjector(aires) {
-  const lats = aires.map((a) => a.latitude);
-  const lngs = aires.map((a) => a.longitude);
-  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
-  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
-  const padLat = (maxLat - minLat || 1) * 0.2;
-  const padLng = (maxLng - minLng || 1) * 0.2;
-  return (a) => ({
-    x: ((a.longitude - (minLng - padLng)) / ((maxLng + padLng) - (minLng - padLng))) * 100,
-    y: 100 - ((a.latitude - (minLat - padLat)) / ((maxLat + padLat) - (minLat - padLat))) * 100,
-  });
-}
 
-const REPORT_TYPES = [
-  { key: "complet", label: "Aire complète", icon: CircleAlert },
-  { key: "borne", label: "Borne HS", icon: Zap },
-  { key: "eau", label: "Eau indispo", icon: Droplet },
-  { key: "bruit", label: "Bruyant", icon: Volume2 },
-  { key: "reseau", label: "Réseau faible", icon: Signal },
-  { key: "securite", label: "Souci sécurité", icon: ShieldCheck },
-];
+/* ================= APP ================= */
+function App() {
 
-function StatusDot({ ok }) {
-  return <span className={`inline-block w-2 h-2 rounded-full ${ok ? "bg-green-700" : "bg-red-700"}`} />;
-}
-function BarLevel({ level, max = 4 }) {
+  const [aires, setAires] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const [a, f] = await Promise.all([
+          fetchAires().catch(() => []),
+          fetchSignalements().catch(() => [])
+        ]);
+
+        setAires(a || []);
+        setSelected(a?.length ? a[0] : null);
+        setError(null);
+
+      } catch (e) {
+        setError(e.message);
+        setAires([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    load();
+  }, []);
+
+  if (loading) {
+    return (
+      <div style={{ padding: 20, fontFamily: "monospace" }}>
+        <Loader2 /> Chargement...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ padding: 20, color: "red" }}>
+        Erreur: {error}
+      </div>
+    );
+  }
+
+  if (!selected) {
+    return <div style={{ padding: 20 }}>Aucune aire</div>;
+  }
+
   return (
-    <div className="flex gap-0.5 items-end h-3">
-      {Array.from({ length: max }).map((_, i) => (
-        <div key={i} className={`w-1 rounded-sm ${i < level ? "bg-amber-700" : "bg-stone-300"}`}
-             style={{ height: `${((i + 1) / max) * 100}%` }} />
+    <div style={{ padding: 20, fontFamily: "Inter" }}>
+      <h1>Bivouac</h1>
+
+      <h3>{selected.nom}</h3>
+
+      <p>{selected.zone}</p>
+
+      <hr />
+
+      {aires.map(a => (
+        <div key={a.id} onClick={() => setSelected(a)}
+          style={{
+            padding: 10,
+            marginTop: 5,
+            border: "1px solid #ccc",
+            cursor: "pointer"
+          }}>
+          {a.nom}
+        </div>
       ))}
     </div>
   );
 }
 
-function BivouacApp() {
-  const [aires, setAires] = useState([]);
-  const [feed, setFeed] = useState([]);
-  const [selectedId, setSelectedId] = useState(null);
-  const [activeFilters, setActiveFilters] = useState([]);
-  const [showReport, setShowReport] = useState(false);
-  const [reportType, setReportType] = useState(null);
-  const [note, setNote] = useState("");
-  const [toast, setToast] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(null);
-  const [sending, setSending] = useState(false);
+/* ================= RENDER ================= */
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        setLoading(true);
-        const [airesData, feedData] = await Promise.all([fetchAires(), fetchSignalements()]);
-        if (cancelled) return;
-        setAires(airesData);
-        setSelectedId(airesData[0]?.id ?? null);
-        setFeed(feedData);
-        setLoadError(null);
-      } catch (e) {
-        if (!cancelled) setLoadError(e.message);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  const projector = useMemo(() => (aires.length ? makeProjector(aires) : null), [aires]);
-  const selected = aires.find((a) => a.id === selectedId) || aires[0];
-
-  const filters = [
-    { key: "eau", label: "Eau OK" },
-    { key: "borne", label: "Borne OK" },
-    { key: "calme", label: "Calme" },
-    { key: "securite", label: "Sécurisé" },
-  ];
-  const toggleFilter = (key) => setActiveFilters((prev) => prev.includes(key) ? prev.filter((f) => f !== key) : [...prev, key]);
-
-  const filteredAires = useMemo(() => aires.filter((a) => {
-    if (activeFilters.includes("eau") && a.eau !== "ok") return false;
-    if (activeFilters.includes("borne") && a.borne !== "ok") return false;
-    if (activeFilters.includes("calme") && a.bruit > 1) return false;
-    if (activeFilters.includes("securite") && a.securite < 3) return false;
-    return true;
-  }), [aires, activeFilters]);
-
-  const submitReport = async () => {
-    if (!reportType || !selected) return;
-    const typeLabel = REPORT_TYPES.find((r) => r.key === reportType)?.label;
-    try {
-      setSending(true);
-      const [inserted] = await insertSignalement({ aire_id: selected.id, type: reportType, note: note || null });
-      setAires((prev) => prev.map((a) => {
-        if (a.id !== selected.id) return a;
-        const updated = { ...a, updated_at: new Date().toISOString() };
-        if (reportType === "complet") updated.complete = true;
-        if (reportType === "borne") updated.borne = "hs";
-        if (reportType === "eau") updated.eau = "hs";
-        if (reportType === "bruit") updated.bruit = Math.min(3, a.bruit + 1);
-        if (reportType === "securite") updated.securite = Math.max(1, a.securite - 1);
-        return updated;
-      }));
-      setFeed((prev) => [{ id: inserted?.id ?? `local-${Date.now()}`, aire_id: selected.id, type: reportType, created_at: new Date().toISOString(), _aireName: selected.nom }, ...prev]);
-      setShowReport(false);
-      setReportType(null);
-      setNote("");
-      setToast(`Signalement envoyé : ${typeLabel}`);
-    } catch (e) {
-      setToast("Erreur d'envoi — vérifie ta connexion");
-    } finally {
-      setSending(false);
-      setTimeout(() => setToast(null), 2500);
-    }
-  };
-
-  const aireName = (id, fallback) => fallback || aires.find((a) => a.id === id)?.nom || "Aire";
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-stone-100 flex justify-center font-body">
-        <div className="w-full max-w-md bg-[#E8DFC3] min-h-screen flex flex-col items-center justify-center gap-3">
-          <Loader2 className="w-6 h-6 text-[#2B2620]" />
-          <p className="text-sm text-[#2B2620] font-mono">Connexion à la base Bivouac…</p>
-        </div>
-      </div>
-    );
-  }
-  if (loadError) {
-    return (
-      <div className="min-h-screen bg-stone-100 flex justify-center font-body">
-        <div className="w-full max-w-md bg-[#E8DFC3] min-h-screen flex flex-col items-center justify-center gap-2 px-6 text-center">
-          <CircleAlert className="w-6 h-6 text-[#A63D2F]" />
-          <p className="text-sm text-[#2B2620] font-medium">Connexion impossible</p>
-          <p className="text-xs text-stone-600 font-mono">{loadError}</p>
-        </div>
-      </div>
-    );
-  }
-  if (!selected) {
-    return (
-      <div className="min-h-screen bg-stone-100 flex justify-center font-body">
-        <div className="w-full max-w-md bg-[#E8DFC3] min-h-screen flex items-center justify-center px-6 text-center">
-          <p className="text-sm text-[#2B2620]">Aucune aire en base pour l'instant.</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-stone-100 flex justify-center font-body">
-      <div className="w-full max-w-md bg-[#E8DFC3] min-h-screen relative shadow-xl">
-        <header className="px-5 pt-6 pb-4 bg-[#2B2620] text-[#E8DFC3] rounded-b-3xl">
-          <div className="flex items-center gap-2">
-            <Compass className="w-6 h-6 text-[#C89B3C]" />
-            <h1 className="font-display text-2xl tracking-wide">Bivouac</h1>
-          </div>
-          <p className="font-mono text-xs mt-1 text-[#C9BFA0]">{filteredAires.length} aires en base</p>
-        </header>
-
-        <div className="flex gap-2 px-5 py-3 overflow-x-auto">
-          {filters.map((f) => (
-            <button key={f.key} onClick={() => toggleFilter(f.key)}
-              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${activeFilters.includes(f.key) ? "bg-[#2B2620] text-[#E8DFC3] border-[#2B2620]" : "bg-transparent text-[#2B2620] border-[#8A7F63]"}`}>
-              {f.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="mx-5 rounded-2xl border-2 border-[#8A7F63] bg-[#DED2A8] relative overflow-hidden" style={{ height: 200 }}>
-          <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="none">
-            {aires.length > 1 && aires.slice(1).map((a, i) => {
-              const p0 = projector(aires[0]), p1 = projector(a);
-              return <line key={i} x1={`${p0.x}%`} y1={`${p0.y}%`} x2={`${p1.x}%`} y2={`${p1.y}%`} stroke="#A63D2F" strokeWidth="1.5" strokeDasharray="4 4" opacity="0.5" />;
-            })}
-          </svg>
-          {projector && aires.map((a) => {
-            const { x, y } = projector(a);
-            return (
-              <button key={a.id} onClick={() => setSelectedId(a.id)}
-                className="absolute -translate-x-1/2 -translate-y-full flex flex-col items-center"
-                style={{ left: `${x}%`, top: `${y}%` }}>
-                <MapPinIcon className="w-7 h-7 drop-shadow"
-                  style={{ color: a.id === selectedId ? "#A63D2F" : a.complete ? "#8A7F63" : "#4B6B4F" }}
-                  fill={a.id === selectedId ? "#A63D2F" : a.complete ? "#8A7F63" : "#4B6B4F"} />
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="mx-5 mt-4 bg-white rounded-2xl border border-[#D9CDA6] overflow-hidden">
-          <div className="px-4 py-3 border-b border-[#EDE6CC] flex items-start justify-between">
-            <div>
-              <h2 className="font-display text-lg text-[#2B2620] leading-tight">{selected.nom}</h2>
-              <p className="text-xs text-stone-500 font-mono mt-0.5">{selected.zone}</p>
-            </div>
-            {selected.complete && <span className="text-[10px] font-semibold uppercase tracking-wide bg-[#A63D2F] text-white px-2 py-1 rounded-full">Complète</span>}
-          </div>
-          <div className="px-4 py-3 grid grid-cols-2 gap-3 text-sm">
-            <div className="flex items-center gap-2"><Zap className="w-4 h-4 text-[#8A7F63]" /><span className="text-stone-700">Borne</span><StatusDot ok={selected.borne === "ok"} /></div>
-            <div className="flex items-center gap-2"><Droplet className="w-4 h-4 text-[#8A7F63]" /><span className="text-stone-700">Eau</span><StatusDot ok={selected.eau === "ok"} /></div>
-            <div className="flex items-center gap-2"><Signal className="w-4 h-4 text-[#8A7F63]" /><span className="text-stone-700">Réseau</span><BarLevel level={selected.reseau} max={4} /></div>
-            <div className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-[#8A7F63]" /><span className="text-stone-700">Sécurité</span><BarLevel level={selected.securite} max={3} /></div>
-          </div>
-          <div className="px-4 pb-3 flex items-center justify-between text-xs text-stone-500 font-mono">
-            <span className="flex items-center gap-1"><ClockIcon className="w-3 h-3" /> maj {timeAgo(selected.updated_at)}</span>
-            <span className="flex items-center gap-1"><Camera className="w-3 h-3" /> {selected.photos ?? 0} photos</span>
-          </div>
-          <button onClick={() => setShowReport(true)} className="w-full bg-[#2B2620] text-[#E8DFC3] py-3 text-sm font-semibold tracking-wide">
-            Signaler un problème sur cette aire
-          </button>
-        </div>
-
-        <div className="mx-5 mt-4">
-          <h3 className="font-display text-sm text-[#2B2620] mb-2 uppercase tracking-wide">Aires à proximité</h3>
-          <div className="space-y-2">
-            {filteredAires.map((a) => (
-              <button key={a.id} onClick={() => setSelectedId(a.id)}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-left ${a.id === selectedId ? "border-[#2B2620] bg-white" : "border-[#D9CDA6] bg-[#F1EAD1]"}`}>
-                <div>
-                  <p className="text-sm font-medium text-[#2B2620]">{a.nom}</p>
-                  <p className="text-xs text-stone-500 font-mono">{a.zone} · maj {timeAgo(a.updated_at)}</p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-stone-400" />
-              </button>
-            ))}
-            {filteredAires.length === 0 && <p className="text-sm text-stone-500 text-center py-4">Aucune aire ne correspond à ces filtres pour l'instant.</p>}
-          </div>
-        </div>
-
-        <div className="mx-5 mt-5 mb-24">
-          <h3 className="font-display text-sm text-[#2B2620] mb-2 uppercase tracking-wide">Journal de bord</h3>
-          <div className="bg-[#2B2620] rounded-2xl px-4 py-3 text-[#E8DFC3]">
-            {feed.length === 0 && <p className="text-xs text-[#8A7F63] py-2">Aucun signalement pour l'instant.</p>}
-            {feed.slice(0, 6).map((f, i) => (
-              <div key={f.id} className={`flex items-center justify-between py-2 text-xs font-mono ${i !== 0 ? "border-t border-[#453F35]" : ""}`}>
-                <span className="truncate pr-2">
-                  <span className="text-[#C89B3C]">{aireName(f.aire_id, f._aireName)}</span> — {REPORT_TYPES.find((r) => r.key === f.type)?.label ?? f.type}
-                </span>
-                <span className="text-[#8A7F63] shrink-0">{timeAgo(f.created_at)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <button onClick={() => setShowReport(true)} className="absolute bottom-6 right-6 w-14 h-14 rounded-full bg-[#A63D2F] text-white flex items-center justify-center shadow-lg">
-          <Plus className="w-6 h-6" />
-        </button>
-
-        {toast && <div className="absolute bottom-24 left-1/2 -translate-x-1/2 bg-[#2B2620] text-[#E8DFC3] text-xs px-4 py-2 rounded-full shadow-lg font-medium">{toast}</div>}
-
-        {showReport && (
-          <div className="absolute inset-0 bg-black/40 flex items-end z-20">
-            <div className="w-full bg-[#E8DFC3] rounded-t-3xl px-5 pt-5 pb-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-display text-lg text-[#2B2620]">Nouveau signalement</h3>
-                <button onClick={() => setShowReport(false)}><XIcon className="w-5 h-5 text-[#2B2620]" /></button>
-              </div>
-              <p className="text-xs text-stone-600 mb-3 font-mono">Aire concernée : {selected.nom}</p>
-              <div className="grid grid-cols-2 gap-2 mb-4">
-                {REPORT_TYPES.map((r) => {
-                  const IconComp = r.icon;
-                  const active = reportType === r.key;
-                  return (
-                    <button key={r.key} onClick={() => setReportType(r.key)}
-                      className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm text-left ${active ? "bg-[#2B2620] text-[#E8DFC3] border-[#2B2620]" : "bg-white text-[#2B2620] border-[#D9CDA6]"}`}>
-                      <IconComp className="w-4 h-4 shrink-0" />
-                      {r.label}
-                    </button>
-                  );
-                })}
-              </div>
-              <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ajouter une précision (facultatif)"
-                className="w-full bg-white border border-[#D9CDA6] rounded-xl px-3 py-2 text-sm mb-4 resize-none" rows={2} />
-              <button onClick={submitReport} disabled={!reportType || sending}
-                className={`w-full py-3 rounded-xl text-sm font-semibold tracking-wide flex items-center justify-center gap-2 ${reportType && !sending ? "bg-[#A63D2F] text-white" : "bg-stone-300 text-stone-500 cursor-not-allowed"}`}>
-                {sending && <Loader2 className="w-4 h-4" />}
-                {sending ? "Envoi en cours…" : "Envoyer le signalement"}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-ReactDOM.createRoot(document.getElementById("root")).render(<BivouacApp />);
 </script>
 </body>
 </html>
