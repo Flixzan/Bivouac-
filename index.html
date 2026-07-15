@@ -4,196 +4,34 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
 <title>Bivouac — Aires en temps réel</title>
-
 <link rel="icon" href="data:,">
 <script src="https://cdn.tailwindcss.com"></script>
-
+<link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@600;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
-
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
 <style>
-body { margin: 0; }
-.font-display { font-family: 'Bitter', serif; }
-.font-body { font-family: 'Inter', sans-serif; }
-.font-mono { font-family: 'JetBrains Mono', monospace; }
+  body { margin: 0; }
+  .font-display { font-family: 'Bitter', serif; }
+  .font-body { font-family: 'Inter', sans-serif; }
+  .font-mono { font-family: 'JetBrains Mono', monospace; }
 </style>
-
+<script>
+  window.onerror = function (msg, url, line, col, err) {
+    document.body.innerHTML =
+      '<pre style="white-space:pre-wrap;padding:20px;color:#A63D2F;font-family:monospace;font-size:13px;background:#fff;">' +
+      'ERREUR JAVASCRIPT\n\n' + msg + '\n\nLigne : ' + line + ', colonne : ' + col +
+      '</pre>';
+    return false;
+  };
+</script>
 </head>
-
 <body>
 <div id="root"></div>
 
-<script type="text/babel">
+<script type="text/babel" data-presets="react">
+const { useState, useMemo, useEffect } = React;
 
-const { useState, useEffect, useMemo } = React;
-
-/* ================= SUPABASE ================= */
-const SUPABASE_URL = "https://omdooibzkysfotifofgo.supabase.co";
-const SUPABASE_KEY = "sb_publishable_eo41UT0yhJguzrLDr97o4A_sZDocubi";
-
-const headers = {
-  apikey: SUPABASE_KEY,
-  Authorization: `Bearer ${SUPABASE_KEY}`,
-  "Content-Type": "application/json",
-};
-
-async function fetchAires() {
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/aires?select=*`, { headers });
-    if (!res.ok) return [];
-    return await res.json();
-  } catch {
-    return [];
-  }
-}
-
-/* ================= SAFE PROJECTOR ================= */
-function makeProjector(aires) {
-
-  const valid = (aires || []).filter(a =>
-    typeof a.latitude === "number" &&
-    typeof a.longitude === "number"
-  );
-
-  if (valid.length === 0) {
-    return () => ({ x: 50, y: 50 });
-  }
-
-  const lats = valid.map(a => a.latitude);
-  const lngs = valid.map(a => a.longitude);
-
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const minLng = Math.min(...lngs);
-  const maxLng = Math.max(...lngs);
-
-  const padLat = (maxLat - minLat || 1) * 0.2;
-  const padLng = (maxLng - minLng || 1) * 0.2;
-
-  return (a) => ({
-    x: ((a.longitude - (minLng - padLng)) /
-      ((maxLng + padLng) - (minLng - padLng))) * 100,
-
-    y: 100 - ((a.latitude - (minLat - padLat)) /
-      ((maxLat + padLat) - (minLat - padLat))) * 100
-  });
-}
-
-/* ================= APP ================= */
-function App() {
-
-  const [aires, setAires] = useState([]);
-  const [selectedId, setSelectedId] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    (async () => {
-      const data = await fetchAires();
-      setAires(data || []);
-      setSelectedId(data?.[0]?.id || null);
-      setLoading(false);
-    })();
-  }, []);
-
-  const projector = useMemo(
-    () => makeProjector(aires || []),
-    [aires]
-  );
-
-  const selected = aires?.find(a => a.id === selectedId) || aires?.[0] || null;
-
-  if (loading) {
-    return <div style={{padding:20}}>Chargement...</div>;
-  }
-
-  if (!selected) {
-    return <div style={{padding:20}}>Aucune aire</div>;
-  }
-
-  return (
-    <div style={{padding:20,fontFamily:"Inter"}}>
-
-      <h1>Bivouac</h1>
-
-      {/* ================= CARTE ================= */}
-      <div style={{
-        position:"relative",
-        height:200,
-        background:"#eee",
-        borderRadius:12,
-        marginBottom:20
-      }}>
-
-        {/* LIGNES */}
-        <svg style={{position:"absolute",width:"100%",height:"100%"}}>
-          {aires.length > 1 && aires.slice(1).map((a,i) => {
-            const p0 = projector(aires[0]);
-            const p1 = projector(a);
-            return (
-              <line key={i}
-                x1={`${p0.x}%`} y1={`${p0.y}%`}
-                x2={`${p1.x}%`} y2={`${p1.y}%`}
-                stroke="red" opacity="0.4"
-              />
-            );
-          })}
-        </svg>
-
-        {/* PINS */}
-        {aires.map(a => {
-          if (!a.latitude || !a.longitude) return null;
-          const p = projector(a);
-
-          return (
-            <div key={a.id}
-              onClick={() => setSelectedId(a.id)}
-              style={{
-                position:"absolute",
-                left:`${p.x}%`,
-                top:`${p.y}%`,
-                transform:"translate(-50%,-100%)",
-                cursor:"pointer",
-                fontSize:18
-              }}>
-              📍
-            </div>
-          );
-        })}
-
-      </div>
-
-      {/* ================= DETAIL ================= */}
-      <div style={{padding:10,border:"1px solid #ccc"}}>
-        <h2>{selected.nom}</h2>
-        <p>{selected.zone}</p>
-      </div>
-
-      {/* ================= LISTE ================= */}
-      <div style={{marginTop:20}}>
-        {aires.map(a => (
-          <div key={a.id}
-            onClick={() => setSelectedId(a.id)}
-            style={{
-              padding:10,
-              border:"1px solid #ddd",
-              marginTop:5,
-              cursor:"pointer"
-            }}>
-            {a.nom}
-          </div>
-        ))}
-      </div>
-
-    </div>
-  );
-}
-
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
-
-</script>
-
-</body>
-</html>
+const Icon = ({ children, className, spin, ...props }) => (
+  
